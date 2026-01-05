@@ -5,7 +5,7 @@
  */
 
 import { expect } from 'vitest';
-import { execSync, spawn } from 'node:child_process';
+import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -276,6 +276,7 @@ export class TestRig {
   // Original fake responses file path for rewriting goldens in record mode.
   originalFakeResponsesPath?: string;
   private _interactiveRuns: InteractiveRun[] = [];
+  private _spawnedProcesses: ChildProcess[] = [];
 
   setup(
     testName: string,
@@ -356,6 +357,7 @@ export class TestRig {
   }
 
   sync() {
+    if (os.platform() === 'win32') return;
     // ensure file system is done before spawning
     execSync('sync', { cwd: this.testDir! });
   }
@@ -390,6 +392,7 @@ export class TestRig {
     stdin?: string;
     stdinDoesNotEnd?: boolean;
     yolo?: boolean;
+    timeout?: number;
   }): Promise<string> {
     const yolo = options.yolo !== false;
     const { command, initialArgs } = this._getCommandAndArgs(
@@ -422,6 +425,7 @@ export class TestRig {
       stdio: 'pipe',
       env: env,
     });
+    this._spawnedProcesses.push(child);
 
     let stdout = '';
     let stderr = '';
@@ -449,8 +453,19 @@ export class TestRig {
       }
     });
 
+    const timeout = options.timeout ?? 120000;
     const promise = new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(
+          new Error(
+            `Process timed out after ${timeout}ms.\nStdout:\n${stdout}\nStderr:\n${stderr}`,
+          ),
+        );
+      }, timeout);
+
       child.on('close', (code: number) => {
+        clearTimeout(timer);
         if (code === 0) {
           // Store the raw stdout for Podman telemetry parsing
           this._lastRunStdout = stdout;
@@ -516,7 +531,7 @@ export class TestRig {
 
   runCommand(
     args: string[],
-    options: { stdin?: string } = {},
+    options: { stdin?: string; timeout?: number } = {},
   ): Promise<string> {
     const { command, initialArgs } = this._getCommandAndArgs();
     const commandArgs = [...initialArgs, ...args];
@@ -524,7 +539,9 @@ export class TestRig {
     const child = spawn(command, commandArgs, {
       cwd: this.testDir!,
       stdio: 'pipe',
+      env: env,
     });
+    this._spawnedProcesses.push(child);
 
     let stdout = '';
     let stderr = '';
@@ -548,8 +565,19 @@ export class TestRig {
       }
     });
 
+    const timeout = options.timeout ?? 120000;
     const promise = new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(
+          new Error(
+            `Process timed out after ${timeout}ms.\nStdout:\n${stdout}\nStderr:\n${stderr}`,
+          ),
+        );
+      }, timeout);
+
       child.on('close', (code: number) => {
+        clearTimeout(timer);
         if (code === 0) {
           this._lastRunStdout = stdout;
           let result = stdout;
@@ -589,6 +617,23 @@ export class TestRig {
       }
     }
     this._interactiveRuns = [];
+
+    // Kill any other spawned processes that are still running
+    for (const child of this._spawnedProcesses) {
+      if (child.exitCode === null && child.signalCode === null) {
+        try {
+          child.kill('SIGKILL');
+        } catch (error) {
+          if (env['VERBOSE'] === 'true') {
+            console.warn(
+              'Failed to kill spawned process during cleanup:',
+              error,
+            );
+          }
+        }
+      }
+    }
+    this._spawnedProcesses = [];
 
     if (
       process.env['REGENERATE_MODEL_GOLDENS'] === 'true' &&
