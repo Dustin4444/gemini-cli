@@ -336,14 +336,16 @@ async function initOauthClient(
 
       // Note that SIGINT might not get raised on Ctrl+C in raw mode
       // so we also need to look for Ctrl+C directly in stdin.
-      stdinHandler = (data) => {
-        if (data.includes(0x03)) {
-          reject(
-            new FatalCancellationError('Authentication cancelled by user.'),
-          );
-        }
-      };
-      process.stdin.on('data', stdinHandler);
+      if (process.stdin.isTTY) {
+        stdinHandler = (data) => {
+          if (data.includes(0x03)) {
+            reject(
+              new FatalCancellationError('Authentication cancelled by user.'),
+            );
+          }
+        };
+        process.stdin.on('data', stdinHandler);
+      }
     });
 
     try {
