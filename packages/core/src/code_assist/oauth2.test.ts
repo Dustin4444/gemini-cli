@@ -1211,7 +1211,9 @@ describe('oauth2', () => {
 
         // Trigger Ctrl+C
         if (dataHandler) {
-          dataHandler(Buffer.from([0x03]));
+          process.nextTick(() => {
+            dataHandler(Buffer.from([0x03]));
+          });
         }
 
         await expect(clientPromise).rejects.toThrow(FatalCancellationError);
