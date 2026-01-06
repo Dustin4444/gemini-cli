@@ -1149,9 +1149,7 @@ describe('oauth2', () => {
 
         // Trigger SIGINT
         if (sigIntHandler) {
-          process.nextTick(() => {
-            sigIntHandler();
-          });
+          sigIntHandler();
         }
 
         await expect(clientPromise).rejects.toThrow(FatalCancellationError);
@@ -1188,24 +1186,12 @@ describe('oauth2', () => {
           () => mockHttpServer as unknown as http.Server,
         );
 
-        // Manual spy for process.stdin.on
-        const originalStdinOn = process.stdin.on;
-        const stdinOnCalls: Array<[string, unknown]> = [];
-        process.stdin.on = (event, listener) => {
-          stdinOnCalls.push([event, listener]);
-          return originalStdinOn.call(process.stdin, event, listener);
-        };
-
-        const originalStdinRemoveListener = process.stdin.removeListener;
-        const stdinRemoveListenerCalls: Array<[string, unknown]> = [];
-        process.stdin.removeListener = (event, listener) => {
-          stdinRemoveListenerCalls.push([event as string, listener]);
-          return originalStdinRemoveListener.call(
-            process.stdin,
-            event,
-            listener,
-          );
-        };
+        // Spy on process.stdin.on
+        const stdinOnSpy = vi.spyOn(process.stdin, 'on');
+        const stdinRemoveListenerSpy = vi.spyOn(
+          process.stdin,
+          'removeListener',
+        );
 
         const clientPromise = getOauthClient(
           AuthType.LOGIN_WITH_GOOGLE,
@@ -1214,7 +1200,7 @@ describe('oauth2', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        const dataCall = stdinOnCalls.find(
+        const dataCall = stdinOnSpy.mock.calls.find(
           (call: [string, ...unknown[]]) => call[0] === 'data',
         );
         const dataHandler = dataCall?.[1] as
@@ -1231,12 +1217,13 @@ describe('oauth2', () => {
         }
 
         await expect(clientPromise).rejects.toThrow(FatalCancellationError);
-        expect(
-          stdinRemoveListenerCalls.some((call) => call[0] === 'data'),
-        ).toBe(true);
+        expect(stdinRemoveListenerSpy).toHaveBeenCalledWith(
+          'data',
+          expect.any(Function),
+        );
 
-        process.stdin.on = originalStdinOn;
-        process.stdin.removeListener = originalStdinRemoveListener;
+        stdinOnSpy.mockRestore();
+        stdinRemoveListenerSpy.mockRestore();
       });
     });
 
