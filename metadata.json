@@ -1,0 +1,6 @@
+{
+  "name": "Gemini CLI",
+  "description": "An open-source AI agent that brings the power of Gemini directly into developer workflows and terminal environments",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
