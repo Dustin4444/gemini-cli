@@ -97,7 +97,7 @@
   ],
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.16.1",
-    "@modelcontextprotocol/sdk": "1.23.0",
+    "@modelcontextprotocol/sdk": "1.25.2",
     "read-package-up": "11.0.0",
     "@octokit/rest": "22.0.0",
     "@types/express": "5.0.3",
